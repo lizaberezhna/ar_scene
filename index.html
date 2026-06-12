@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>AR Виправлена версія</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: Arial; }
+        .status-panel {
+            position: fixed;
+            bottom: 20px;
+            left: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.8);
+            color: #0f0;
+            padding: 12px;
+            border-radius: 10px;
+            font-size: 14px;
+            text-align: center;
+            z-index: 100;
+            font-family: monospace;
+            backdrop-filter: blur(5px);
+            border: 1px solid #0f0;
+        }
+        .marker-guide {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            color: #ff0;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            z-index: 100;
+        }
+        .error-panel {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255,0,0,0.9);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            z-index: 200;
+            display: none;
+            text-align: center;
+            max-width: 80%;
+        }
+    </style>
+</head>
+<body>
+    <div class="marker-guide" id="guideStatus">
+        🔍 AR ініціалізація...
+    </div>
+    <div class="status-panel" id="statusPanel">
+        📷 Очікуємо камеру...
+    </div>
+    <div class="error-panel" id="errorPanel">
+        ⚠️ Помилка<br><span id="errorText"></span>
+    </div>
+
+    <a-scene 
+        id="scene"
+        embedded 
+        arjs="sourceType: webcam; 
+              debugUIEnabled: true;
+              detectionMode: mono;
+              matrixCodeType: 3x3;"
+        vr-mode-ui="enabled: false">
+        
+        <!-- МАРКЕР 1: HIRO (ВБУДОВАНИЙ) -->
+        <a-marker id="hiroMarker" preset="hiro">
+            <!-- Група з правильною орієнтацією -->
+            <a-entity rotation="-90 0 0" scale="0.2 0.2 0.2">
+                <!-- Червоний куб -->
+                <a-box position="0 0.5 0" width="1" height="1" depth="1" color="#FF3366">
+                    <a-animation attribute="rotation" dur="3000" repeat="indefinite" from="0 0 0" to="0 360 0" easing="linear"></a-animation>
+                    <a-animation attribute="material.color" dur="2000" repeat="indefinite" direction="alternate" from="#FF3366" to="#33FF66"></a-animation>
+                </a-box>
+                <!-- Сфера над кубом -->
+                <a-sphere position="0 1.2 0" radius="0.4" color="#FFCC00">
+                    <a-animation attribute="scale" dur="1500" repeat="indefinite" direction="alternate" from="0.5 0.5 0.5" to="1.5 1.5 1.5"></a-animation>
+                </a-sphere>
+                <!-- Платформа -->
+                <a-cylinder position="0 -0.4 0" radius="0.8" height="0.1" color="#FFFFFF"></a-cylinder>
+            </a-entity>
+        </a-marker>
+
+        <!-- МАРКЕР 2: KANJI (ВБУДОВАНИЙ) -->
+        <a-marker id="kanjiMarker" preset="kanji">
+            <a-entity rotation="-90 0 0" scale="0.2 0.2 0.2">
+                <!-- Тор -->
+                <a-torus position="0 0.5 0" radius="0.8" radius-tubular="0.08" color="#FF8800">
+                    <a-animation attribute="rotation" dur="2000" repeat="indefinite" from="90 0 0" to="90 360 0" easing="linear"></a-animation>
+                </a-torus>
+                <!-- Циліндр -->
+                <a-cylinder position="0 -0.2 0" radius="0.5" height="0.2" color="#FFFFFF"></a-cylinder>
+                <!-- Сфера -->
+                <a-sphere position="0 1 0" radius="0.35" color="#00CCFF">
+                    <a-animation attribute="position" dur="1200" repeat="indefinite" direction="alternate" from="0 0.8 0" to="0 1.3 0" easing="ease-in-out"></a-animation>
+                </a-sphere>
+            </a-entity>
+        </a-marker>
+
+        <a-entity id="camera" camera></a-entity>
+    </a-scene>
+
+    <script>
+        (function() {
+            const guideStatus = document.getElementById('guideStatus');
+            const statusPanel = document.getElementById('statusPanel');
+            const errorPanel = document.getElementById('errorPanel');
+            const errorText = document.getElementById('errorText');
+
+            function showError(msg) {
+                errorText.innerText = msg;
+                errorPanel.style.display = 'block';
+                statusPanel.style.background = 'rgba(255,0,0,0.8)';
+                statusPanel.style.borderColor = '#ff0';
+                statusPanel.innerText = '❌ ПОМИЛКА: ' + msg;
+                console.error('AR ERROR:', msg);
+            }
+
+            function updateStatus(msg, isOk = true) {
+                statusPanel.innerText = msg;
+                statusPanel.style.background = isOk ? 'rgba(0,0,0,0.8)' : 'rgba(255,100,0,0.8)';
+                console.log('AR STATUS:', msg);
+            }
+
+            function updateGuide(msg) {
+                guideStatus.innerText = msg;
+                console.log('GUIDE:', msg);
+            }
+
+            // Перевірка підтримки камери
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                showError('Ваш браузер не підтримує камеру. Використовуйте HTTPS та сучасний браузер.');
+                updateGuide('❌ Камера не підтримується', false);
+            }
+
+            // Чекаємо завантаження сцени
+            const scene = document.querySelector('a-scene');
+            if (scene) {
+                scene.addEventListener('loaded', () => {
+                    updateGuide('✅ Сцена завантажена. Очікуємо камеру...');
+                    updateStatus('✅ Сцена готова. Наведіть камеру на маркер HIRO або KANJI', true);
+                });
+
+                scene.addEventListener('arjs-video-loaded', () => {
+                    updateGuide('✅ Камера активована! Шукайте маркери');
+                    updateStatus('📱 КАМЕРА ПРАЦЮЄ | Покажіть маркер H', true);
+                });
+
+                scene.addEventListener('arjs-error', (ev) => {
+                    showError('Помилка AR.js: ' + (ev.detail?.error || 'невідома помилка'));
+                });
+            } else {
+                showError('Сцена A-Frame не знайдена');
+            }
+
+            // Відстеження маркерів
+            const hiroMarker = document.getElementById('hiroMarker');
+            const kanjiMarker = document.getElementById('kanjiMarker');
+
+            if (hiroMarker) {
+                hiroMarker.addEventListener('markerFound', () => {
+                    updateGuide('🎉 МАРКЕР HIRO ЗНАЙДЕНО!');
+                    updateStatus('🎉 Об\'єкти на маркері HIRO активовані!', true);
+                    statusPanel.style.background = 'rgba(0,100,0,0.9)';
+                    statusPanel.style.borderColor = '#0f0';
+                    setTimeout(() => {
+                        if (statusPanel.style.background !== 'rgba(255,0,0,0.8)') {
+                            statusPanel.style.background = 'rgba(0,0,0,0.8)';
+                        }
+                    }, 2000);
+                });
+                hiroMarker.addEventListener('markerLost', () => {
+                    updateGuide('❌ Маркер HIRO втрачено');
+                    updateStatus('❌ Маркер втрачено. Покажіть маркер H знову', false);
+                });
+            }
+
+            if (kanjiMarker) {
+                kanjiMarker.addEventListener('markerFound', () => {
+                    updateGuide('🎉 МАРКЕР KANJI ЗНАЙДЕНО!');
+                    updateStatus('🎉 Об\'єкти на маркері KANJI активовані!', true);
+                });
+                kanjiMarker.addEventListener('markerLost', () => {
+                    updateGuide('❌ Маркер KANJI втрачено');
+                });
+            }
+
+            // Додаткове налагодження
+            window.addEventListener('error', (e) => {
+                console.error('Global error:', e.error);
+                if (e.message && e.message.includes('getUserMedia')) {
+                    showError('Немає доступу до камери. Перевірте HTTPS та дозволи браузера.');
+                }
+            });
+        })();
+    </script>
+</body>
+</html>
